@@ -162,6 +162,67 @@ def get_turnstile_token_with_context(
 # ---------------------------------------------------------------------------
 # 策略 1：Playwright 反检测浏览器
 # ---------------------------------------------------------------------------
+def _x_server_alive(display: str) -> bool:
+    """检测指定 DISPLAY 的 X server 是否可连"""
+    try:
+        import os as _os
+
+        n = display.split(":", 1)[1].split(".")[0] if ":" in display else "99"
+        # X server 的 Unix socket 存在即视为存活（Linux 容器场景）
+        return _os.path.exists(f"/tmp/.X11-unix/X{n}")
+    except Exception:
+        return False
+
+
+def _ensure_x_display() -> bool:
+    """确保有头模式有可用的 X server；容器内 Xvfb 未运行时自动拉起。
+
+    返回 True 表示 DISPLAY 可用（可启动有头浏览器）。
+    不依赖 docker-compose 的 command 是否正确配置 Xvfb。
+    """
+    try:
+        import os as _os
+        import subprocess
+
+        display = _os.environ.get("DISPLAY", "").strip() or ":99"
+        if _x_server_alive(display):
+            _os.environ["DISPLAY"] = display
+            return True
+        logger.warning(
+            f"DISPLAY={display} 但 X server 未运行，尝试自动启动 Xvfb..."
+        )
+        proc = subprocess.Popen(
+            [
+                "Xvfb",
+                display,
+                "-screen",
+                "0",
+                "1280x800x24",
+                "-ac",
+                "+extension",
+                "GLX",
+                "+render",
+                "-noreset",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # 最多等待 5 秒确认 X server 就绪（socket 创建有延迟）
+        for _ in range(10):
+            time.sleep(0.5)
+            if _x_server_alive(display):
+                _os.environ["DISPLAY"] = display
+                logger.info(f"Xvfb 已就绪（DISPLAY={display}）")
+                return True
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        return False
+    except Exception:
+        return False
+
+
 def _solve_with_playwright(
     verification_url: str, timeout: int
 ) -> Tuple[str, str, str, str, str]:
@@ -175,11 +236,11 @@ def _solve_with_playwright(
     headless = os.getenv("CAPTCHA_HEADLESS", "true").strip().lower() != "false"
     force_headed = os.getenv("CAPTCHA_FORCE_HEADED", "").strip().lower() == "true"
 
-    # 有头模式但容器内无 X server（未配 xvfb）时自动回退无头
-    if not headless and not force_headed and not os.environ.get("DISPLAY"):
+    # 有头模式但容器内无 X server 时：先尝试自愈拉起 Xvfb，仍不可用才回退无头
+    if not headless and not force_headed and not _ensure_x_display():
         logger.warning(
-            "CAPTCHA_HEADLESS=false 但未检测到 DISPLAY（容器内缺少 xvfb），"
-            "自动回退 headless 模式；如需有头模式请用 xvfb-run 启动容器进程"
+            "CAPTCHA_HEADLESS=false 但无法获取可用 X server（容器内缺少 xvfb），"
+            "自动回退 headless 模式；请确认镜像已安装 xvfb 或容器已重建"
         )
         headless = True
 
@@ -304,11 +365,18 @@ def _solve_with_playwright(
 
             # 主动触发 turnstile 执行（自动执行模式未生效时）
             _trigger_turnstile(page)
+            w_count = _widget_count(page)
+            if w_count == 0:
+                logger.warning(
+                    "页面未检测到已渲染的 turnstile widget（SheerID SPA 可能在提交表单时"
+                    "才初始化 widget）；将尝试手动 render + execute 在同环境生成 token"
+                )
 
             # 轮询提取 token（期间持续补取 sitekey；turnstile 若在轮询期间
             # 才加载完成则补触发执行，避免空转到超时）
             start = time.time()
             trigger_done = False
+            manual_render_done = False
             while time.time() - start < timeout:
                 token = _poll_token(page)
                 if token:
@@ -325,6 +393,15 @@ def _solve_with_playwright(
                     if not sitekey and sitekey_from_requests:
                         sitekey = sitekey_from_requests[0]
                         logger.info(f"已从网络请求 URL 提取到 sitekey: {sitekey[:8]}...")
+                # 兜底：页面未自动渲染 widget 且已有 sitekey 时，手动渲染并执行，
+                # 使 token 在页面内（与提交同 IP/UA/指纹环境）生成
+                if not manual_render_done and sitekey:
+                    if _widget_count(page) == 0:
+                        logger.info(
+                            f"尝试手动渲染 turnstile widget（sitekey={sitekey[:8]}...）"
+                        )
+                        _ensure_manual_widget(page, sitekey, action, cdata)
+                    manual_render_done = True
                 time.sleep(2)
 
             if not token:
@@ -385,12 +462,74 @@ def _trigger_turnstile(page):
         pass
 
 
+def _widget_count(page) -> int:
+    """已渲染的 turnstile widget 数量（window.turnstile._c 长度）"""
+    try:
+        return (
+            page.evaluate(
+                "() => (window.turnstile && window.turnstile._c) ? window.turnstile._c.length : 0"
+            )
+            or 0
+        )
+    except Exception:
+        return 0
+
+
+def _ensure_manual_widget(page, sitekey: str, action: str = "", cdata: str = "") -> bool:
+    """页面未自动渲染 turnstile widget 时，手动 render + execute 兜底
+
+    SheerID 的 SPA 页面在加载时可能不渲染 widget（提交表单时才初始化），
+    此时轮询 execute() 永远拿不到 token，只能回退第三方打码——但第三方
+    token 与其服务器环境绑定，与容器提交环境（IP/UA/指纹）不一致，会触发
+    fraudRulesReject。手动 render 一个 widget 并在页面内执行，可使 token
+    与提交环境完全一致（同 IP、同 UA、同指纹）。
+    """
+    if not sitekey:
+        return False
+    try:
+        ok = page.evaluate(
+            """(args) => {
+                if (!window.turnstile) return false;
+                const sk = args.sitekey;
+                const widgets = window.turnstile._c || [];
+                for (const w of widgets) {
+                    if (!w) continue;
+                    const cfg = w.config || w;
+                    if (cfg.sitekey === sk) return true; // 已有同 sitekey 的 widget
+                }
+                try {
+                    const id = window.turnstile.render(
+                        document.body || document.documentElement,
+                        {
+                            sitekey: sk,
+                            action: args.action || undefined,
+                            cdata: args.cdata || undefined,
+                            callback: (t) => { window.__SHEERID_TOKEN__ = t; },
+                            'expired-callback': () => {},
+                            'error-callback': () => {},
+                        }
+                    );
+                    window.turnstile.execute(id);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }""",
+            {"sitekey": sitekey, "action": action, "cdata": cdata},
+        )
+        return bool(ok)
+    except Exception:
+        return False
+
+
 def _poll_token(page) -> str:
-    """多策略提取 token：隐藏字段 / turnstile API / 按 widget id"""
+    """多策略提取 token：手动回调 / 隐藏字段 / turnstile API / 按 widget id"""
     try:
         return (
             page.evaluate(
                 """() => {
+                    // 方式0：手动渲染 widget 的 callback 写入的 token
+                    if (window.__SHEERID_TOKEN__) return window.__SHEERID_TOKEN__;
                     // 方式1：读取 cf-turnstile-response 隐藏字段
                     const inputs = document.querySelectorAll(
                         'input[name="cf-turnstile-response"], textarea[name="cf-turnstile-response"]'

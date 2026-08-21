@@ -148,17 +148,40 @@ try:
         print(f"    console 错误/警告: {console_msgs[:8] if console_msgs else '<无>'}")
 
         dom = page.evaluate(
-            """() => ({
-                hasTurnstile: !!window.turnstile,
-                sitekeyDom: (() => {
-                    const e = document.querySelector('[data-sitekey],[data-turnstile-sitekey]');
-                    return e ? (e.getAttribute('data-sitekey') || e.getAttribute('data-turnstile-sitekey')) : '';
-                })(),
-                title: document.title,
-                bodyStart: (document.body ? document.body.innerText.slice(0, 200) : ''),
-            })"""
+            """() => {
+                let widgets = [];
+                if (window.turnstile && window.turnstile._c) {
+                    widgets = window.turnstile._c.map((w) => {
+                        const cfg = (w && (w.config || w)) || {};
+                        return {
+                            sitekey: cfg.sitekey || '',
+                            action: cfg.action || '',
+                            cdata: cfg.cdata || '',
+                        };
+                    });
+                }
+                return {
+                    hasTurnstile: !!window.turnstile,
+                    widgetCount: widgets.length,
+                    widgets,
+                    sitekeyDom: (() => {
+                        const e = document.querySelector('[data-sitekey],[data-turnstile-sitekey]');
+                        return e ? (e.getAttribute('data-sitekey') || e.getAttribute('data-turnstile-sitekey')) : '';
+                    })(),
+                    title: document.title,
+                    bodyStart: (document.body ? document.body.innerText.slice(0, 200) : ''),
+                };
+            }"""
         )
         print(f"    window.turnstile 存在: {dom['hasTurnstile']}")
+        print(f"    已渲染 widget 数: {dom['widgetCount']}")
+        for w in dom["widgets"][:5]:
+            print(
+                f"      sitekey={mask(w['sitekey']) if w['sitekey'] else '-'} "
+                f"action={w['action'] or '-'} cdata={w['cdata'][:12] + '...' if w['cdata'] else '-'}"
+            )
+        if dom["widgetCount"] == 0 and dom["hasTurnstile"]:
+            print("    ⚠️ turnstile 已加载但无 widget 渲染（SPA 提交时才初始化 → 需手动 render）")
         print(f"    DOM sitekey: {mask(dom['sitekeyDom']) if dom['sitekeyDom'] else '<未找到>'}")
         print(f"    页面标题: {dom['title']}")
         print(f"    页面文本开头: {dom['bodyStart'][:120]!r}")
