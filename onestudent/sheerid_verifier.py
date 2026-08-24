@@ -8,6 +8,7 @@ Features:
 - University-specific styling
 """
 
+import os
 import re
 import logging
 import asyncio
@@ -175,7 +176,8 @@ class GeminiStudentVerifier:
         logger.info(f"DOB: {birth_date}")
         logger.info(f"Verification ID: {self.verification_id}")
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
             try:
                 # Step 1: Check current status
                 logger.info("Step 1/5: Checking verification status...")

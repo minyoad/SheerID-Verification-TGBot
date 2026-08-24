@@ -1,4 +1,5 @@
 """SheerID 学生验证主程序"""
+import os
 import re
 import random
 import logging
@@ -24,7 +25,8 @@ class SheerIDVerifier:
     def __init__(self, verification_id: str):
         self.verification_id = verification_id
         self.device_fingerprint = self._generate_device_fingerprint()
-        self.http_client = httpx.Client(timeout=30.0)
+        proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        self.http_client = httpx.Client(timeout=30.0, proxy=proxy)
 
     def __del__(self):
         if hasattr(self, "http_client"):

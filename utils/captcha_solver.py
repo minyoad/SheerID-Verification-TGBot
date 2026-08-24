@@ -26,7 +26,7 @@ import logging
 import os
 import re
 import time
-from typing import Tuple
+from typing import Optional, Tuple
 
 try:
     from config import load_env_file
@@ -42,6 +42,17 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = 60
+
+
+def _get_proxy() -> Optional[str]:
+    """读取代理配置（PROXY_URL 优先，回退 HTTPS_PROXY），None 表示不使用代理"""
+    return (
+        os.getenv("PROXY_URL", "").strip()
+        or os.getenv("HTTPS_PROXY", "").strip()
+        or os.getenv("https_proxy", "").strip()
+        or None
+    )
+
 
 # 与注入指纹一致的 Windows Chrome UA
 _UA = (
@@ -197,6 +208,11 @@ def _solve_with_playwright(
                 headless = True
                 browser = p.chromium.launch(headless=headless, args=_LAUNCH_ARGS)
 
+            proxy = _get_proxy()
+            if proxy:
+                logger.info(
+                    f"Playwright 使用代理: {proxy.split('@')[-1] if '@' in proxy else proxy}"
+                )
             context = browser.new_context(
                 user_agent=_UA,
                 viewport={"width": 1280, "height": 800},
@@ -204,6 +220,7 @@ def _solve_with_playwright(
                 timezone_id="America/New_York",
                 color_scheme="light",
                 device_scale_factor=1,
+                proxy={"server": proxy} if proxy else None,
             )
             context.add_init_script(_STEALTH_JS)
             page = context.new_page()

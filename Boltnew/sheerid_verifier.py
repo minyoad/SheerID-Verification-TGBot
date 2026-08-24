@@ -1,4 +1,5 @@
 """SheerID 教师验证主程序（Bolt.now）"""
+import os
 import re
 import random
 import logging
@@ -26,7 +27,8 @@ class SheerIDVerifier:
         self.verification_id = verification_id
         self.external_user_id = self.parse_external_user_id(self.install_page_url)
         self.device_fingerprint = self._generate_device_fingerprint()
-        self.http_client = httpx.Client(timeout=30.0)
+        proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        self.http_client = httpx.Client(timeout=30.0, proxy=proxy)
 
     def __del__(self):
         if hasattr(self, "http_client"):
