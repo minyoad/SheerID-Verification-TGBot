@@ -124,9 +124,10 @@ class SheerIDVerifier:
             # 提交学生信息
             logger.info("步骤 2/4: 提交学生信息...")
 
-            # 获取 Turnstile 人机验证 token（SheerID 要求）
-            from utils.captcha_solver import get_turnstile_token
-            captcha_token = get_turnstile_token(
+            # 获取 Turnstile 人机验证 token + 与 token 同环境的真实浏览器指纹
+            # （SheerID 风控校验 deviceFingerprintHash 与 token 来源环境一致性）
+            from utils.captcha_solver import get_turnstile_token_with_context
+            captcha_token, real_fingerprint = get_turnstile_token_with_context(
                 f"{config.SHEERID_BASE_URL}/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}"
             )
             if not captcha_token:
@@ -147,7 +148,7 @@ class SheerIDVerifier:
                     "idExtended": school["idExtended"],
                     "name": school["name"],
                 },
-                "deviceFingerprintHash": self.device_fingerprint,
+                "deviceFingerprintHash": real_fingerprint or self.device_fingerprint,
                 "locale": "en-US",
                 "captchaToken": captcha_token,
                 "metadata": {

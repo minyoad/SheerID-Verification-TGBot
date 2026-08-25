@@ -165,10 +165,13 @@ class SheerIDVerifier:
             # 获取 Turnstile 人机验证 token（SheerID 要求）
             captcha_token = turnstile_token or hcaptcha_token
             if not captcha_token:
-                from utils.captcha_solver import get_turnstile_token
-                captcha_token = get_turnstile_token(
+                from utils.captcha_solver import get_turnstile_token_with_context
+                captcha_token, real_fingerprint = get_turnstile_token_with_context(
                     f"{SHEERID_BASE_URL}/verify/{PROGRAM_ID}/?verificationId={self.verification_id}"
                 )
+                if real_fingerprint:
+                    self.device_fingerprint = real_fingerprint
+                    logger.info(f"使用真实浏览器指纹（与 token 同环境）: {real_fingerprint[:12]}...")
             if not captcha_token:
                 raise Exception(
                     "无法获取 Turnstile 人机验证 token（SheerID 要求 captchaToken 字段）。"
