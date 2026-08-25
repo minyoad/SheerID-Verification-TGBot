@@ -28,6 +28,8 @@ class SheerIDVerifier:
         self.external_user_id = self.parse_external_user_id(self.install_page_url)
         self.device_fingerprint = self._generate_device_fingerprint()
         proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        if proxy and "://" not in proxy:
+            proxy = "http://" + proxy
         self.http_client = httpx.Client(timeout=30.0, proxy=proxy)
 
     def __del__(self):

@@ -177,6 +177,8 @@ class GeminiStudentVerifier:
         logger.info(f"Verification ID: {self.verification_id}")
         
         proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        if proxy and "://" not in proxy:
+            proxy = "http://" + proxy
         async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
             try:
                 # Step 1: Check current status

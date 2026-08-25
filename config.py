@@ -21,6 +21,25 @@ def load_env_file() -> None:
 
 load_env_file()
 
+def get_proxy_url() -> str:
+    """获取统一代理 URL（自动补协议前缀）。
+
+    优先级：PROXY_URL > HTTPS_PROXY > https_proxy。
+    浏览器（Playwright）、打码服务与 HTTP 提交请求必须走同一代理，
+    否则 token 与出口 IP 不一致会触发 invalidCaptchaToken / fraudRulesReject。
+    若 .env 中配置的是 "user:pass@host:port"（ZooProxy 控制台格式，无协议前缀），
+    会自动补 http://，否则 httpx/requests 无法正确解析代理导致请求直连。
+    """
+    proxy = (
+        os.getenv("PROXY_URL", "").strip()
+        or os.getenv("HTTPS_PROXY", "").strip()
+        or os.getenv("https_proxy", "").strip()
+    )
+    if proxy and "://" not in proxy:
+        proxy = "http://" + proxy
+    return proxy
+
+
 # ==================== Telegram Bot 配置 ====================
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "pk_oa")

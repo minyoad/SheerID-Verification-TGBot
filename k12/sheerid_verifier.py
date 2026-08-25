@@ -46,6 +46,8 @@ class SheerIDVerifier:
         self.verification_id = verification_id
         self.device_fingerprint = self._generate_device_fingerprint()
         proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        if proxy and "://" not in proxy:
+            proxy = "http://" + proxy
         self.http_client = httpx.Client(timeout=30.0, proxy=proxy)
 
     def __del__(self):

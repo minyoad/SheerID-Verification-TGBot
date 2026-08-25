@@ -61,6 +61,8 @@ class SheerIDVerifier:
             f'"Chromium";v="{major}", "Google Chrome";v="{major}", "Not-A.Brand";v="99"'
         )
         proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        if proxy and "://" not in proxy:
+            proxy = "http://" + proxy
         self.http_client = httpx.Client(timeout=30.0, proxy=proxy)
 
     def _newrelic_headers(self) -> Dict[str, str]:
