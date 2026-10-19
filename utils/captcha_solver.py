@@ -499,7 +499,11 @@ def _solve_with_playwright(
                         logger.info(
                             f"尝试手动渲染 turnstile widget（sitekey={sitekey[:8]}...）"
                         )
-                        _ensure_manual_widget(page, sitekey, action, cdata)
+                        if not _ensure_manual_widget(page, sitekey, action, cdata):
+                            logger.warning(
+                                "手动渲染 turnstile widget 失败"
+                                "（window.turnstile 未加载或 render 被拒绝）"
+                            )
                     manual_render_done = True
                 time.sleep(2)
 
@@ -512,7 +516,13 @@ def _solve_with_playwright(
                 logger.warning(
                     "Playwright 在限定时间内未获取到 Turnstile token"
                     "（headless 模式可能被 Cloudflare 判定为机器人；"
-                    "可尝试 CAPTCHA_HEADLESS=false + xvfb，或配置打码服务兜底）"
+                    "可尝试 CAPTCHA_HEADLESS=false + xvfb）。"
+                    + (
+                        ""
+                        if _get_proxy()
+                        else " 当前未配置 PROXY_URL：数据中心出口 IP 通常无法通过 "
+                        "Turnstile，建议配置住宅代理使浏览器与提交请求共用同一出口 IP"
+                    )
                 )
     except Exception as e:
         logger.error(f"Playwright 获取 Turnstile token 异常: {e}")
