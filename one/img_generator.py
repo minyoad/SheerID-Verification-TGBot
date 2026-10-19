@@ -756,6 +756,25 @@ def generate_html(first_name: str, last_name: str, doc_type: DocumentType = None
         return generate_class_schedule_html(first_name, last_name, university_key, university_config)
 
 
+# SheerID 学校 ID（config.SCHOOLS 的 key）→ 证件模板大学 key（utils.document_templates.UNIVERSITIES）
+# 上传的证件学校必须与提交的 organization 一致，否则人工审核/风控会因信息不匹配直接拒绝
+# （此前证件随机使用 MIT/Stanford 等模板，而提交学校为 Penn State，属于严重不一致）
+# 在 config.SCHOOLS 新增学校时，需在此登记对应的 UNIVERSITIES key；未登记则回退随机大学。
+SCHOOL_TEMPLATE_MAP = {
+    # Pennsylvania State University 各校区
+    '2565': 'psu',
+    '651379': 'psu',
+    '8387': 'psu',
+    '8382': 'psu',
+    '8396': 'psu',
+    '8379': 'psu',
+    '2560': 'psu',
+    '650600': 'psu',
+    '8388': 'psu',
+    '8394': 'psu',
+}
+
+
 def generate_image(first_name: str, last_name: str, school_id: str = None, doc_type: DocumentType = None) -> bytes:
     """
     Generate student verification document PNG with realistic effects
@@ -772,8 +791,11 @@ def generate_image(first_name: str, last_name: str, school_id: str = None, doc_t
     try:
         from playwright.sync_api import sync_playwright
         
-        # Generate HTML
-        html_content = generate_html(first_name, last_name, doc_type=doc_type)
+        # Generate HTML（证件学校与提交的 organization 保持一致）
+        university_key = SCHOOL_TEMPLATE_MAP.get(str(school_id).strip()) if school_id else None
+        html_content = generate_html(
+            first_name, last_name, doc_type=doc_type, university_key=university_key
+        )
         
         # Get randomized viewport and zoom
         viewport = randomize_viewport()
@@ -814,7 +836,7 @@ def generate_image(first_name: str, last_name: str, school_id: str = None, doc_t
 # Backward compatibility functions
 def generate_psu_id():
     """Deprecated: Use generate_university_id() instead"""
-    return generate_university_id('mit')
+    return generate_university_id('psu')
 
 
 def generate_psu_email(first_name, last_name):

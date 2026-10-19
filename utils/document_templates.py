@@ -129,6 +129,175 @@ UNIVERSITIES = {
         'id_length': 9,
         'portal_name': 'Bursar\'s Office',
     },
+    'psu': {
+        'name': 'Pennsylvania State University',
+        'short_name': 'Penn State',
+        'email_domain': 'psu.edu',
+        'primary_color': '#1E407C',  # Penn State Blue
+        'secondary_color': '#96BEE6',  # Penn State Light Blue
+        'system_name': 'LionPATH',
+        'logo_text': 'Penn State',
+        'id_format': '9_digits',  # PSU 学号：9 位数字
+        'id_prefix': '',
+        'id_length': 9,
+        'portal_name': 'Student Financial Services',
+    },
+    'harvard': {
+        'name': 'Harvard University',
+        'short_name': 'Harvard',
+        'email_domain': 'harvard.edu',
+        'primary_color': '#A51C30',  # Crimson
+        'secondary_color': '#2E2E2E',
+        'system_name': 'my.harvard',
+        'logo_text': 'Harvard',
+        'id_format': '8_digits',  # Harvard Key ID：8 位数字
+        'id_prefix': '',
+        'id_length': 8,
+        'portal_name': 'Student Financial Services',
+    },
+    'yale': {
+        'name': 'Yale University',
+        'short_name': 'Yale',
+        'email_domain': 'yale.edu',
+        'primary_color': '#00356B',  # Yale Blue
+        'secondary_color': '#FFFFFF',
+        'system_name': 'Yale Hub',
+        'logo_text': 'Yale',
+        'id_format': '9_digits',
+        'id_prefix': '',
+        'id_length': 9,
+        'portal_name': 'Student Financial Services',
+    },
+    'princeton': {
+        'name': 'Princeton University',
+        'short_name': 'Princeton',
+        'email_domain': 'princeton.edu',
+        'primary_color': '#E77500',  # Princeton Orange
+        'secondary_color': '#000000',
+        'system_name': 'TigerHub',
+        'logo_text': 'Princeton',
+        'id_format': '9_digits',
+        'id_prefix': '',
+        'id_length': 9,
+        'portal_name': 'Office of the Registrar',
+    },
+    'ucla': {
+        'name': 'University of California, Los Angeles',
+        'short_name': 'UCLA',
+        'email_domain': 'ucla.edu',
+        'primary_color': '#2D7DA8',  # UCLA Blue
+        'secondary_color': '#FFD100',  # UCLA Gold
+        'system_name': 'MyUCLA',
+        'logo_text': 'UCLA',
+        'id_format': '9_digits',  # UCLA UID：9 位数字
+        'id_prefix': '',
+        'id_length': 9,
+        'portal_name': 'BruinBill',
+    },
+    'usc': {
+        'name': 'University of Southern California',
+        'short_name': 'USC',
+        'email_domain': 'usc.edu',
+        'primary_color': '#990000',  # USC Cardinal
+        'secondary_color': '#FFC72C',  # USC Gold
+        'system_name': 'MyUSC',
+        'logo_text': 'USC',
+        'id_format': '10_digits',  # USC ID：10 位数字
+        'id_prefix': '',
+        'id_length': 10,
+        'portal_name': 'Office of the Registrar',
+    },
+    'utexas': {
+        'name': 'University of Texas at Austin',
+        'short_name': 'UT Austin',
+        'email_domain': 'utexas.edu',
+        'primary_color': '#BF5700',  # Burnt Orange
+        'secondary_color': '#333F48',
+        'system_name': 'UT Direct',
+        'logo_text': 'UT Austin',
+        'id_format': '9_digits',
+        'id_prefix': '',
+        'id_length': 9,
+        'portal_name': 'Office of the Registrar',
+    },
+    'uw': {
+        'name': 'University of Washington',
+        'short_name': 'UW',
+        'email_domain': 'uw.edu',
+        'primary_color': '#4B2E83',  # UW Purple
+        'secondary_color': '#B7A57A',  # UW Gold
+        'system_name': 'MyUW',
+        'logo_text': 'UW',
+        'id_format': '7_digits',  # UW NetID 学号：7 位数字
+        'id_prefix': '',
+        'id_length': 7,
+        'portal_name': 'Student Fiscal Services',
+    },
+    'cornell': {
+        'name': 'Cornell University',
+        'short_name': 'Cornell',
+        'email_domain': 'cornell.edu',
+        'primary_color': '#B31B1B',  # Cornell Red
+        'secondary_color': '#FFFFFF',
+        'system_name': 'Student Center',
+        'logo_text': 'Cornell',
+        'id_format': '8_digits',
+        'id_prefix': '',
+        'id_length': 8,
+        'portal_name': 'Office of the Registrar',
+    },
+    'upenn': {
+        'name': 'University of Pennsylvania',
+        'short_name': 'Penn',
+        'email_domain': 'upenn.edu',
+        'primary_color': '#990000',  # Penn Red
+        'secondary_color': '#011F5B',  # Penn Blue
+        'system_name': 'PennPortal',
+        'logo_text': 'Penn',
+        'id_format': '8_digits',
+        'id_prefix': '',
+        'id_length': 8,
+        'portal_name': 'Student Financial Services',
+    },
+    'duke': {
+        'name': 'Duke University',
+        'short_name': 'Duke',
+        'email_domain': 'duke.edu',
+        'primary_color': '#001A57',  # Duke Blue
+        'secondary_color': '#FFFFFF',
+        'system_name': 'DukeHub',
+        'logo_text': 'Duke',
+        'id_format': '7_digits',
+        'id_prefix': '',
+        'id_length': 7,
+        'portal_name': 'Office of the Registrar',
+    },
+    'northwestern': {
+        'name': 'Northwestern University',
+        'short_name': 'Northwestern',
+        'email_domain': 'northwestern.edu',
+        'primary_color': '#4E2A84',  # Northwestern Purple
+        'secondary_color': '#FFFFFF',
+        'system_name': 'CAESAR',
+        'logo_text': 'Northwestern',
+        'id_format': '8_digits',
+        'id_prefix': '',
+        'id_length': 8,
+        'portal_name': 'Office of the Registrar',
+    },
+    'uiuc': {
+        'name': 'University of Illinois Urbana-Champaign',
+        'short_name': 'UIUC',
+        'email_domain': 'illinois.edu',
+        'primary_color': '#13294B',  # Illinois Navy
+        'secondary_color': '#FF552E',  # Illinois Orange
+        'system_name': 'Student Self-Service',
+        'logo_text': 'Illinois',
+        'id_format': '9_digits',  # UIN：9 位数字
+        'id_prefix': '',
+        'id_length': 9,
+        'portal_name': 'Office of the Registrar',
+    },
 }
 
 
@@ -241,6 +410,10 @@ def generate_university_id(university_key: str) -> str:
         # Georgia Tech: 9 digits starting with 9
         numbers = ''.join([str(random.randint(0, 9)) for _ in range(8)])
         return f"9{numbers}"
+    elif id_format.endswith('_digits') and id_format[:-len('_digits')].isdigit():
+        # 通用 N 位数字学号（如 USC 10 位），按 id_format 指定的位数生成
+        length = int(id_format[:-len('_digits')])
+        return ''.join([str(random.randint(0, 9)) for _ in range(length)])
     else:
         # Default: 8-digit numeric ID
         return ''.join([str(random.randint(0, 9)) for _ in range(8)])
@@ -252,7 +425,13 @@ def generate_university_email(first_name: str, last_name: str, university_key: s
     domain = config['email_domain']
     
     # Different universities have different email formats
-    if university_key in ['mit', 'cmu']:
+    if university_key == 'psu':
+        # Penn State Access Account 格式：3 个字母 + 4 位数字（如 abc1234@psu.edu）
+        # 必须与提交的邮箱格式一致，否则证件与提交信息不匹配
+        letters = ''.join(random.choice('abcdefghijklmnopqrstuvwxyz') for _ in range(3))
+        digits = ''.join([str(random.randint(0, 9)) for _ in range(4)])
+        email_user = f"{letters}{digits}"
+    elif university_key in ['mit', 'cmu']:
         # MIT/CMU often use first initial + last name
         email_user = f"{first_name[0].lower()}{last_name.lower()}"
     elif university_key == 'columbia':
