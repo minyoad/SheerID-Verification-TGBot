@@ -10,6 +10,8 @@ SheerID 在学生/教师信息提交步骤启用了 Cloudflare Turnstile 人机�
    - 多策略提取 token（隐藏字段 / turnstile API / 按 widget id）
 2. 第三方打码服务兜底（配置 CAPSOLVER_API_KEY 或 2CAPTCHA_API_KEY 时自动启用）
    - 先从页面 HTML 提取 sitekey，再调用打码 API 获取 token
+   - 配置了 PROXY_URL 时，打码任务会走同一代理（token 绑定代理出口 IP，
+     与提交请求 IP 一致，避免 invalidCaptchaToken；未配代理才用 ProxyLess 模式）
 
 配置（环境变量）：
     CAPTCHA_HEADLESS     是否无头模式，默认 true；容器内无 DISPLAY 时自动回退无头
@@ -26,7 +28,8 @@ import logging
 import os
 import re
 import time
-from typing import Tuple
+from typing import Dict, Optional, Tuple
+from urllib.parse import urlparse
 
 try:
     from config import load_env_file
@@ -42,6 +45,92 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = 60
+
+
+def _get_proxy() -> Optional[str]:
+    """读取代理配置（PROXY_URL 优先，回退 HTTPS_PROXY），None 表示不使用代理。
+
+    自动补齐 scheme（用户常填 user:pass@host:port 短格式）。
+    """
+    proxy = (
+        os.getenv("PROXY_URL", "").strip()
+        or os.getenv("HTTPS_PROXY", "").strip()
+        or os.getenv("https_proxy", "").strip()
+        or None
+    )
+    if proxy and "://" not in proxy:
+        proxy = "http://" + proxy
+    return proxy
+
+
+def _parse_proxy_url(proxy_url: Optional[str]) -> Optional[Dict[str, str]]:
+    """解析代理 URL 为 Playwright proxy 参数（server/username/password）。
+
+    Playwright 官方推荐把认证拆到 username/password 字段（URL 内嵌认证
+    在新版本可能被忽略），因此这里从 URL 中解析拆分。
+    """
+    if not proxy_url:
+        return None
+    if "://" not in proxy_url:
+        proxy_url = "http://" + proxy_url
+    try:
+        parsed = urlparse(proxy_url)
+    except Exception:
+        return None
+    if not parsed.hostname:
+        return None
+
+    scheme = parsed.scheme or "http"
+    server = f"{scheme}://{parsed.hostname}"
+    if parsed.port:
+        server += f":{parsed.port}"
+
+    result: Dict[str, str] = {"server": server}
+    if parsed.username:
+        result["username"] = parsed.username
+    if parsed.password:
+        result["password"] = parsed.password
+    return result
+
+
+def _proxy_for_service() -> Optional[Dict[str, str]]:
+    """把 PROXY_URL 拆分为打码服务（2captcha/capsolver）可直接使用的参数。
+
+    返回 {"proxyType","proxyAddress","proxyPort"[,"proxyLogin","proxyPassword"]}，
+    None 表示未配置代理。
+
+    关键作用：让打码服务 worker 走与提交请求相同的代理 IP 完成 Turnstile，
+    保证 token 绑定的 IP 与提交出口 IP 一致。若用 ProxyLess 模式（token 在
+    打码服务器 IP 上生成），而提交请求走代理 IP，两者不一致会被 Cloudflare
+    Turnstile 服务端校验拒绝 → invalidCaptchaToken。
+    """
+    proxy = _get_proxy()
+    if not proxy:
+        return None
+    try:
+        parsed = urlparse(proxy)
+    except Exception:
+        return None
+    if not parsed.hostname or not parsed.port:
+        return None
+    scheme = (parsed.scheme or "http").lower()
+    proxy_type = {
+        "http": "HTTP",
+        "https": "HTTPS",
+        "socks4": "SOCKS4",
+        "socks5": "SOCKS5",
+    }.get(scheme, "HTTP")
+    result: Dict[str, str] = {
+        "proxyType": proxy_type,
+        "proxyAddress": parsed.hostname,
+        "proxyPort": str(parsed.port),
+    }
+    if parsed.username:
+        result["proxyLogin"] = parsed.username
+    if parsed.password:
+        result["proxyPassword"] = parsed.password
+    return result
+
 
 # 与注入指纹一致的 Windows Chrome UA
 _UA = (
@@ -258,6 +347,9 @@ def _solve_with_playwright(
                 headless = True
                 browser = p.chromium.launch(headless=headless, args=_LAUNCH_ARGS)
 
+            proxy_params = _parse_proxy_url(_get_proxy())
+            if proxy_params:
+                logger.info(f"Playwright 使用代理: {proxy_params['server']}")
             context = browser.new_context(
                 user_agent=_UA,
                 viewport={"width": 1280, "height": 800},
@@ -265,6 +357,7 @@ def _solve_with_playwright(
                 timezone_id="America/New_York",
                 color_scheme="light",
                 device_scale_factor=1,
+                proxy=proxy_params,
             )
             context.add_init_script(_STEALTH_JS)
             page = context.new_page()
@@ -302,7 +395,13 @@ def _solve_with_playwright(
             page.on("request", _on_request)
 
             logger.info(f"打开验证页面: {verification_url}")
-            page.goto(verification_url, wait_until="domcontentloaded", timeout=30000)
+            try:
+                # 走代理时首次连接可能较慢，用 commit 尽早返回 + 60s 超时
+                page.goto(verification_url, wait_until="commit", timeout=60000)
+            except Exception as e:
+                logger.warning(f"首次加载页面失败/超时（{e}），等待后重试一次...")
+                time.sleep(3)
+                page.goto(verification_url, wait_until="commit", timeout=60000)
 
             # 快速预检：页面正文若显示 SheerID 拒绝/错误文案，说明该验证会话
             # 已不可继续（verificationId 被拒/失效），直接失败返回，避免空转轮询
@@ -729,13 +828,15 @@ def _fetch_sitekey_via_requests(page_url: str) -> str:
     try:
         import requests
 
+        proxy = _get_proxy()
         r = requests.get(
             page_url,
-            timeout=15,
+            timeout=30,
             headers={
                 "User-Agent": _UA,
                 "Accept-Language": "en-US,en;q=0.9",
             },
+            proxies={"http": proxy, "https": proxy} if proxy else None,
         )
         _last_fetched_html = r.text
         return _extract_sitekey_from_html(r.text)
@@ -839,7 +940,7 @@ def _solve_with_third_party(
 def _solve_with_capsolver(
     page_url: str, sitekey: str, api_key: str, action: str = "", cdata: str = ""
 ) -> str:
-    """capsolver: AntiTurnstileTaskProxyLess"""
+    """capsolver: AntiTurnstileTask（配置代理时 worker 走同一代理，保证 IP 一致）"""
     try:
         import requests
     except Exception as e:
@@ -847,11 +948,25 @@ def _solve_with_capsolver(
         return ""
 
     try:
-        task = {
-            "type": "AntiTurnstileTaskProxyLess",
-            "websiteURL": page_url,
-            "websiteKey": sitekey,
-        }
+        proxy_params = _proxy_for_service()
+        if proxy_params:
+            # 带代理任务：worker 走代理 IP 完成验证，token 绑定代理出口 IP
+            task = {
+                "type": "AntiTurnstileTask",
+                "websiteURL": page_url,
+                "websiteKey": sitekey,
+                "proxy": proxy_params,
+            }
+            logger.info(
+                f"capsolver 打码走代理（token 绑定代理 IP）: "
+                f"{proxy_params['proxyAddress']}:{proxy_params['proxyPort']}"
+            )
+        else:
+            task = {
+                "type": "AntiTurnstileTaskProxyLess",
+                "websiteURL": page_url,
+                "websiteKey": sitekey,
+            }
         # capsolver 支持 metadata.action / metadata.cdata（与 2captcha 的
         # action/data 对应），widget 带这些参数时须一并传入
         metadata = {}
@@ -862,7 +977,7 @@ def _solve_with_capsolver(
         if metadata:
             task["metadata"] = metadata
         logger.info(
-            f"capsolver 打码提交: sitekey={sitekey[:8]}... action={action or '-'} "
+            f"capsolver 打码提交: sitekey={sitekey} action={action or '-'} "
             f"cdata={cdata[:12] + '...' if cdata else '-'}"
         )
         resp = requests.post(
@@ -919,8 +1034,18 @@ def _solve_with_2captcha(
             params["action"] = action
         if cdata:
             params["data"] = cdata
+        # 让 2captcha worker 走统一代理完成验证：token 绑定代理出口 IP，
+        # 与提交请求 IP 一致，避免 ProxyLess 模式（token 绑定打码服务器 IP）
+        # 与代理出口不一致导致 invalidCaptchaToken
+        proxy_params = _proxy_for_service()
+        if proxy_params:
+            params.update(proxy_params)
+            logger.info(
+                f"2captcha 打码走代理（token 绑定代理 IP）: "
+                f"{proxy_params['proxyAddress']}:{proxy_params['proxyPort']}"
+            )
         logger.info(
-            f"2captcha 打码提交: sitekey={sitekey[:8]}... action={action or '-'} "
+            f"2captcha 打码提交: sitekey={sitekey} action={action or '-'} "
             f"cdata={cdata[:12] + '...' if cdata else '-'}"
         )
         r = requests.get(

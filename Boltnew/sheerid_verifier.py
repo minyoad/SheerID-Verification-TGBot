@@ -1,4 +1,5 @@
 """SheerID 教师验证主程序（Bolt.now）"""
+import os
 import re
 import random
 import logging
@@ -26,7 +27,10 @@ class SheerIDVerifier:
         self.verification_id = verification_id
         self.external_user_id = self.parse_external_user_id(self.install_page_url)
         self.device_fingerprint = self._generate_device_fingerprint()
-        self.http_client = httpx.Client(timeout=30.0)
+        proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        if proxy and "://" not in proxy:
+            proxy = "http://" + proxy
+        self.http_client = httpx.Client(timeout=30.0, proxy=proxy)
 
     def __del__(self):
         if hasattr(self, "http_client"):
@@ -149,9 +153,10 @@ class SheerIDVerifier:
             # 提交教师信息
             logger.info("步骤 2/5: 提交教师信息...")
 
-            # 获取 Turnstile 人机验证 token（SheerID 要求）
-            from utils.captcha_solver import get_turnstile_token
-            captcha_token = get_turnstile_token(
+            # 获取 Turnstile 人机验证 token + 与 token 同环境的真实浏览器指纹
+            # （SheerID 风控校验 deviceFingerprintHash 与 token 来源环境一致性）
+            from utils.captcha_solver import get_turnstile_token_with_context
+            captcha_token, real_fingerprint = get_turnstile_token_with_context(
                 f"{config.SHEERID_BASE_URL}/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}"
             )
             if not captcha_token:
@@ -172,7 +177,7 @@ class SheerIDVerifier:
                     "idExtended": school["idExtended"],
                     "name": school["name"],
                 },
-                "deviceFingerprintHash": self.device_fingerprint,
+                "deviceFingerprintHash": real_fingerprint or self.device_fingerprint,
                 "externalUserId": self.external_user_id,
                 "locale": "en-US",
                 "captchaToken": captcha_token,

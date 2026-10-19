@@ -1,4 +1,5 @@
 """SheerID 教师验证主程序"""
+import os
 import re
 import random
 import logging
@@ -44,7 +45,10 @@ class SheerIDVerifier:
         """
         self.verification_id = verification_id
         self.device_fingerprint = self._generate_device_fingerprint()
-        self.http_client = httpx.Client(timeout=30.0)
+        proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        if proxy and "://" not in proxy:
+            proxy = "http://" + proxy
+        self.http_client = httpx.Client(timeout=30.0, proxy=proxy)
 
     def __del__(self):
         """清理 HTTP 客户端"""
@@ -161,10 +165,13 @@ class SheerIDVerifier:
             # 获取 Turnstile 人机验证 token（SheerID 要求）
             captcha_token = turnstile_token or hcaptcha_token
             if not captcha_token:
-                from utils.captcha_solver import get_turnstile_token
-                captcha_token = get_turnstile_token(
+                from utils.captcha_solver import get_turnstile_token_with_context
+                captcha_token, real_fingerprint = get_turnstile_token_with_context(
                     f"{SHEERID_BASE_URL}/verify/{PROGRAM_ID}/?verificationId={self.verification_id}"
                 )
+                if real_fingerprint:
+                    self.device_fingerprint = real_fingerprint
+                    logger.info(f"使用真实浏览器指纹（与 token 同环境）: {real_fingerprint[:12]}...")
             if not captcha_token:
                 raise Exception(
                     "无法获取 Turnstile 人机验证 token（SheerID 要求 captchaToken 字段）。"

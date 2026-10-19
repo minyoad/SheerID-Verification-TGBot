@@ -1,4 +1,5 @@
 """SheerID 学生验证主程序"""
+import os
 import re
 import json
 import base64
@@ -59,7 +60,10 @@ class SheerIDVerifier:
         self._sec_ch_ua = (
             f'"Chromium";v="{major}", "Google Chrome";v="{major}", "Not-A.Brand";v="99"'
         )
-        self.http_client = httpx.Client(timeout=30.0)
+        proxy = os.getenv("PROXY_URL", "").strip() or os.getenv("HTTPS_PROXY", "").strip() or None
+        if proxy and "://" not in proxy:
+            proxy = "http://" + proxy
+        self.http_client = httpx.Client(timeout=30.0, proxy=proxy)
 
     def _newrelic_headers(self) -> Dict[str, str]:
         """生成 NewRelic 追踪请求头（SheerID 前端 jslib 真实请求会携带）"""
